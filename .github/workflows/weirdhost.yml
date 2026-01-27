@@ -1,4 +1,5 @@
-name: WeirdHost
+name: Weirdhost Auto Renew
+
 on:
   schedule:
     # 每天 UTC 时间 4:00 运行（北京时间 12:00）
@@ -24,9 +25,7 @@ jobs:
       
       - name: Install dependencies
         working-directory: scripts
-        run: |
-          pip install ${{ vars.PIP_DEPS }}
-          ${{ vars.FETCH_BROWSER_CMD }}
+        run: pip install -r requirements.txt -q > /dev/null 2>&1
       
       - name: Run renew script
         working-directory: scripts
