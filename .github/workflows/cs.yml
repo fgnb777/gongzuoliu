@@ -27,9 +27,8 @@ jobs:
         working-directory: scripts
         run: |
           python -m pip install --upgrade pip
-          pip install camoufox playwright
+          pip install camoufox playwright requests
           playwright install chromium
-          # 下载 camoufox 浏览器
           python -m camoufox fetch
       
       - name: Run renew script
@@ -51,3 +50,9 @@ jobs:
           name: screenshots-${{ github.run_id }}
           path: scripts/screenshots/
           retention-days: 7
+      
+      - name: Cleanup old artifacts
+        if: always()
+        run: |
+          # 清理旧截图，避免存储浪费
+          find scripts/screenshots -name "*.png" -type f -mtime +7 -delete 2>/dev/null || true
