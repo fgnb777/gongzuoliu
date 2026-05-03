@@ -34,14 +34,12 @@ jobs:
       - name: Run renew script
         working-directory: scripts
         env:
-          # 优先使用 Cookies（推荐）
-          KATABUMP_COOKIES: ${{ secrets.KATABUMP_COOKIES }}
-          # 备用：邮箱密码
-          KATABUMP_MAIL: ${{ secrets.KATABUMP_MAIL }}
-          KATABUMP_PASS: ${{ secrets.KATABUMP_PASS }}
-          # Telegram 通知
+          # Telegram 通知（可选）
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # 备用登录信息（可选）
+          KATABUMP_MAIL: ${{ secrets.KATABUMP_MAIL }}
+          KATABUMP_PASS: ${{ secrets.KATABUMP_PASS }}
           # CI 环境标识
           CI: "true"
           # GitHub Actions 信息
