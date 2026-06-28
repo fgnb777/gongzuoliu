@@ -1,43 +1,123 @@
 name: LunesHost Auto Login
 
 on:
+  # 定时运行：每周五 UTC 12:00（北京时间 20:00）
   schedule:
     - cron: '0 12 * * 5'
+  # 手动触发
   workflow_dispatch:
+
+env:
+  # 设置时区
+  TZ: Asia/Shanghai
 
 jobs:
   login:
-    runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:latest
+    runs-on: ubuntu-22.04  # 使用 Ubuntu 22.04 避免依赖问题
     
     steps:
-      - name: Checkout code
+      # ============================================================
+      # 1. 拉取私有仓库代码
+      # ============================================================
+      - name: Checkout private repository
         uses: actions/checkout@v4
         with:
-          repository: fgnb777/lunes.host-baohuo
-          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          path: scripts
+          repository: fgnb777/lunes.host-baohuo  # 你的私有仓库地址
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}  # 使用 GitHub Token
+          path: scripts  # 克隆到 scripts 目录
+          fetch-depth: 1  # 只拉取最新代码
 
+      # ============================================================
+      # 2. 列出拉取的文件（调试用）
+      # ============================================================
+      - name: List files
+        working-directory: scripts
+        run: |
+          echo "📁 拉取的文件列表:"
+          ls -la
+          echo ""
+          echo "📄 检查脚本文件:"
+          ls -la *.py 2>/dev/null || echo "⚠️ 没有找到 Python 脚本"
+
+      # ============================================================
+      # 3. 设置 Python 环境
+      # ============================================================
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: scripts/requirements.txt
 
+      # ============================================================
+      # 4. 安装系统依赖（Ubuntu 22.04）
+      # ============================================================
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgbm1 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxrandr2 \
+            libxtst6 \
+            libxss1 \
+            libasound2 \
+            libatk-bridge2.0-0 \
+            libgtk-3-0 \
+            libnss3 \
+            libnspr4 \
+            curl
+
+      # ============================================================
+      # 5. 安装 Python 依赖和 Playwright
+      # ============================================================
       - name: Install Python dependencies
         working-directory: scripts
         run: |
-          pip install playwright
+          # 如果有 requirements.txt 就安装，否则直接安装 playwright
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install playwright
+          fi
+          
+          # 安装 Playwright 浏览器（自动安装依赖）
+          playwright install --with-deps chromium
 
+      # ============================================================
+      # 6. 运行登录脚本
+      # ============================================================
       - name: Run login script
         working-directory: scripts
         env:
+          # Telegram 通知配置
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # CI 环境标识
           GITHUB_ACTIONS: true
           PYTHONUNBUFFERED: 1
-        run: python lunes_login.py
+          # 设置用户代理（可选）
+          USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        run: |
+          # 查找并运行主脚本（支持多种文件名）
+          if [ -f lunes_login.py ]; then
+            python lunes_login.py
+          elif [ -f main.py ]; then
+            python main.py
+          elif [ -f login.py ]; then
+            python login.py
+          else
+            echo "❌ 找不到 Python 脚本文件！"
+            echo "当前目录文件:"
+            ls -la
+            exit 1
+          fi
 
+      # ============================================================
+      # 7. 上传截图（总是执行）
+      # ============================================================
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -45,11 +125,30 @@ jobs:
           name: screenshots-${{ github.run_id }}
           path: scripts/screenshots/
           retention-days: 7
+          if-no-files-found: warn
 
+      # ============================================================
+      # 8. 上传日志文件（总是执行）
+      # ============================================================
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: logs-${{ github.run_id }}
-          path: scripts/lunes_login.log
+          path: |
+            scripts/*.log
+            scripts/logs/
           retention-days: 7
+          if-no-files-found: warn
+
+      # ============================================================
+      # 9. 上传运行结果（总是执行）
+      # ============================================================
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ github.run_id }}
+          path: scripts/results.json
+          retention-days: 7
+          if-no-files-found: warn
