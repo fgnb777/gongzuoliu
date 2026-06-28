@@ -1,4 +1,4 @@
-name: LunesHost Auto Login
+name: LunesHost
 
 on:
   schedule:
