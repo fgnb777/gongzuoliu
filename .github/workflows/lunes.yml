@@ -1,4 +1,4 @@
-name: Luneshost Auto Login
+name: lunes
 
 on:
   # 每周五 UTC 12:00 运行（北京时间 20:00）
@@ -18,7 +18,15 @@ jobs:
         with:
           repository: fgnb777/lunes.host-baohuo
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          path: scripts
+          path: private-repo
+
+      - name: Debug - List directory structure
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Contents of current directory:"
+          ls -la
+          echo "Contents of private-repo directory:"
+          ls -la private-repo/ || echo "private-repo directory not found"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -26,11 +34,17 @@ jobs:
           python-version: '3.12'
 
       - name: Install system dependencies
-        working-directory: scripts/Luneshost
+        working-directory: private-repo
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb x11-utils xdotool scrot fonts-noto-cjk jq wget
-          pip install -r requirements.txt
+          # 检查是否存在 requirements.txt
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          else
+            echo "requirements.txt not found, installing default packages"
+            pip install selenium seleniumbase python-telegram-bot
+          fi
           seleniumbase install chromedriver
 
       - name: Install gost (proxy converter)
@@ -45,16 +59,13 @@ jobs:
           SOCKS_PROXY_URL: ${{ secrets.SOCKS_PROXY_URL }}
         if: ${{ env.SOCKS_PROXY_URL != '' }}
         run: |
-          # 启动 gost 作为后台进程，将节点转换为本地 HTTP 代理
           nohup gost -L=:1080 -F="$SOCKS_PROXY_URL" > /tmp/gost.log 2>&1 &
           sleep 5
           echo "Gost proxy started on 127.0.0.1:1080"
-          # 验证 gost 是否运行
           ps aux | grep gost || echo "Warning: gost may not be running"
           netstat -tlnp | grep 1080 || echo "Port 1080 not found"
 
-      - name: Run login script
-        working-directory: scripts/Luneshost
+      - name: Find and run login script
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -62,6 +73,26 @@ jobs:
           PROXY_SERVER: "http://127.0.0.1:1080"
           HEADLESS: "false"
         run: |
+          # 查找 main.py 文件的位置
+          echo "Looking for main.py in private-repo:"
+          find private-repo -name "main.py" -type f
+          
+          # 获取 main.py 所在的目录
+          MAIN_DIR=$(find private-repo -name "main.py" -type f -exec dirname {} \; | head -1)
+          
+          if [ -z "$MAIN_DIR" ]; then
+            echo "Error: main.py not found in private-repo"
+            echo "Listing all files in private-repo:"
+            find private-repo -type f
+            exit 1
+          fi
+          
+          echo "Found main.py in: $MAIN_DIR"
+          echo "Contents of $MAIN_DIR:"
+          ls -la "$MAIN_DIR"
+          
+          # 切换到 main.py 所在目录并运行
+          cd "$MAIN_DIR"
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python main.py
 
       - name: Upload screenshots
@@ -69,6 +100,6 @@ jobs:
         if: always()
         with:
           name: screenshots-${{ github.run_number }}
-          path: scripts/Luneshost/screenshots/
+          path: private-repo/**/screenshots/
           retention-days: 7
           if-no-files-found: warn
