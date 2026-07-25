@@ -27,9 +27,24 @@ jobs:
         working-directory: scripts
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb x11-utils xdotool scrot fonts-noto-cjk
+          sudo apt-get install -y \
+            xvfb \
+            x11-utils \
+            xdotool \
+            scrot \
+            fonts-noto-cjk \
+            python3-tk \
+            python3-dev \
+            scrot \
+            libxext6 \
+            libxrender1 \
+            libxtst6 \
+            libxi6
           pip install -r requirements.txt
           seleniumbase install chromedriver
+          
+          # 安装 PyAutoGUI 依赖
+          pip install pyautogui pillow opencv-python
 
       # ============================================================
       # 安装 gost（SOCKS5 → HTTP 代理转换）
@@ -46,22 +61,15 @@ jobs:
       # ============================================================
       - name: Start gost proxy
         run: |
-          # SOCKS5 代理信息
           SOCKS5_URL="socks5://cd648a45:30ee9a73da99@130.193.96.121:24169"
-          
-          # 启动 gost，将 SOCKS5 转为本地 HTTP 代理（端口 1080）
           nohup gost -L=:1080 -F="$SOCKS5_URL" > /tmp/gost.log 2>&1 &
           sleep 5
-          
           echo "✅ Gost 代理已启动"
-          echo "📍 SOCKS5 → HTTP 代理: http://127.0.0.1:1080"
-          
-          # 验证代理是否运行
           ps aux | grep gost | grep -v grep || echo "⚠️ gost 可能未运行"
           netstat -tlnp | grep 1080 || echo "⚠️ 端口 1080 未监听"
 
       # ============================================================
-      # 运行登录脚本
+      # 运行登录脚本（使用 xvfb-run）
       # ============================================================
       - name: Run login script
         working-directory: scripts
@@ -69,11 +77,11 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           HEADLESS: "true"
-          # 使用 gost 转换后的 HTTP 代理
           IS_PROXY: "true"
           PROXY_SERVER: "http://127.0.0.1:1080"
         run: |
           echo "🔗 使用代理: http://127.0.0.1:1080"
+          # 使用 xvfb-run 提供虚拟显示
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python main.py
 
       - name: Upload screenshots
