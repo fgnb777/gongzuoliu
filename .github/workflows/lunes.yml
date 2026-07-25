@@ -1,4 +1,4 @@
-name: lunes
+name: LunesHost Auto Login
 
 on:
   # 每周五 UTC 12:00 运行（北京时间 20:00）
@@ -7,100 +7,133 @@ on:
   # 手动触发
   workflow_dispatch:
 
+env:
+  TZ: Asia/Shanghai
+
 jobs:
   login:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-22.04  # 使用 Ubuntu 22.04 避免依赖问题
     
     steps:
-      - name: Checkout private repo
+      # ============================================================
+      # 1. 拉取私有仓库代码
+      # ============================================================
+      - name: Checkout private repository
         uses: actions/checkout@v4
         with:
-          repository: fgnb777/lunes.host-baohuo
+          repository: fgnb777/lunes.host-baohuo  # 你的私有仓库地址
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          path: private-repo
+          path: scripts
+          fetch-depth: 1
 
-      - name: Debug - List directory structure
+      # ============================================================
+      # 2. 列出拉取的文件（调试用）
+      # ============================================================
+      - name: List files
+        working-directory: scripts
         run: |
-          echo "Current directory: $(pwd)"
-          echo "Contents of current directory:"
+          echo "📁 拉取的文件列表:"
           ls -la
-          echo "Contents of private-repo directory:"
-          ls -la private-repo/ || echo "private-repo directory not found"
+          echo ""
+          echo "📄 检查脚本文件:"
+          ls -la *.py 2>/dev/null || echo "⚠️ 没有找到 Python 脚本"
 
+      # ============================================================
+      # 3. 设置 Python 环境
+      # ============================================================
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: scripts/requirements.txt
 
+      # ============================================================
+      # 4. 安装系统依赖（Ubuntu 22.04）
+      # ============================================================
       - name: Install system dependencies
-        working-directory: private-repo
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb x11-utils xdotool scrot fonts-noto-cjk jq wget
-          # 检查是否存在 requirements.txt
-          if [ -f "requirements.txt" ]; then
+          sudo apt-get install -y \
+            libgbm1 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxrandr2 \
+            libxtst6 \
+            libxss1 \
+            libasound2 \
+            libatk-bridge2.0-0 \
+            libgtk-3-0 \
+            libnss3 \
+            libnspr4 \
+            curl
+
+      # ============================================================
+      # 5. 安装 Python 依赖和 Playwright
+      # ============================================================
+      - name: Install Python dependencies
+        working-directory: scripts
+        run: |
+          # 如果有 requirements.txt 就安装，否则直接安装 playwright
+          if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
-            echo "requirements.txt not found, installing default packages"
-            pip install selenium seleniumbase python-telegram-bot pysocks
+            pip install playwright
           fi
-          seleniumbase install chromedriver
+          
+          # 安装 Playwright 浏览器（自动安装依赖）
+          playwright install --with-deps chromium
 
-      - name: Install gost (proxy converter)
-        run: |
-          wget -q https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
-          gunzip gost-linux-amd64-2.11.5.gz
-          chmod +x gost-linux-amd64-2.11.5
-          sudo mv gost-linux-amd64-2.11.5 /usr/local/bin/gost
-
-      - name: Start gost proxy
+      # ============================================================
+      # 6. 运行登录脚本
+      # ============================================================
+      - name: Run login script
+        working-directory: scripts
         env:
-          SOCKS_PROXY_URL: "socks5://cd648a45:30ee9a73da99@130.193.96.121:24169"
-        run: |
-          # 启动 gost 将 SOCKS5 转换为 HTTP 代理
-          nohup gost -L=:1080 -F="$SOCKS_PROXY_URL" > /tmp/gost.log 2>&1 &
-          sleep 5
-          echo "Gost proxy started on 127.0.0.1:1080"
-          # 验证 gost 是否运行
-          ps aux | grep gost || echo "Warning: gost may not be running"
-          netstat -tlnp | grep 1080 || echo "Port 1080 not found"
-
-      - name: Find and run login script
-        env:
+          # Telegram 通知配置
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          IS_PROXY: "true"
-          PROXY_SERVER: "http://127.0.0.1:1080"
-          HEADLESS: "false"
+          # CI 环境标识
+          GITHUB_ACTIONS: true
+          PYTHONUNBUFFERED: 1
         run: |
-          # 查找 main.py 文件的位置
-          echo "Looking for main.py in private-repo:"
-          find private-repo -name "main.py" -type f
-          
-          # 获取 main.py 所在的目录
-          MAIN_DIR=$(find private-repo -name "main.py" -type f -exec dirname {} \; | head -1)
-          
-          if [ -z "$MAIN_DIR" ]; then
-            echo "Error: main.py not found in private-repo"
-            echo "Listing all files in private-repo:"
-            find private-repo -type f
+          # 查找并运行主脚本（支持多种文件名）
+          if [ -f lunes_login.py ]; then
+            python lunes_login.py
+          elif [ -f main.py ]; then
+            python main.py
+          elif [ -f login.py ]; then
+            python login.py
+          else
+            echo "❌ 找不到 Python 脚本文件！"
+            echo "当前目录文件:"
+            ls -la
             exit 1
           fi
-          
-          echo "Found main.py in: $MAIN_DIR"
-          echo "Contents of $MAIN_DIR:"
-          ls -la "$MAIN_DIR"
-          
-          # 切换到 main.py 所在目录并运行
-          cd "$MAIN_DIR"
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python main.py
 
+      # ============================================================
+      # 7. 上传截图（总是执行）
+      # ============================================================
       - name: Upload screenshots
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: screenshots-${{ github.run_number }}
-          path: private-repo/**/screenshots/
+          name: screenshots-${{ github.run_id }}
+          path: scripts/screenshots/
+          retention-days: 7
+          if-no-files-found: warn
+
+      # ============================================================
+      # 8. 上传日志文件（总是执行）
+      # ============================================================
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ github.run_id }}
+          path: |
+            scripts/*.log
+            scripts/logs/
           retention-days: 7
           if-no-files-found: warn
