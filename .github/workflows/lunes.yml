@@ -43,7 +43,7 @@ jobs:
             pip install -r requirements.txt
           else
             echo "requirements.txt not found, installing default packages"
-            pip install selenium seleniumbase python-telegram-bot
+            pip install selenium seleniumbase python-telegram-bot pysocks
           fi
           seleniumbase install chromedriver
 
@@ -54,14 +54,15 @@ jobs:
           chmod +x gost-linux-amd64-2.11.5
           sudo mv gost-linux-amd64-2.11.5 /usr/local/bin/gost
 
-      - name: Start gost proxy (if proxy configured)
+      - name: Start gost proxy
         env:
           SOCKS_PROXY_URL: ${{ secrets.SOCKS_PROXY_URL }}
-        if: ${{ env.SOCKS_PROXY_URL != '' }}
         run: |
+          # 启动 gost 将 SOCKS5 转换为 HTTP 代理
           nohup gost -L=:1080 -F="$SOCKS_PROXY_URL" > /tmp/gost.log 2>&1 &
           sleep 5
           echo "Gost proxy started on 127.0.0.1:1080"
+          # 验证 gost 是否运行
           ps aux | grep gost || echo "Warning: gost may not be running"
           netstat -tlnp | grep 1080 || echo "Port 1080 not found"
 
@@ -69,7 +70,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          IS_PROXY: ${{ secrets.SOCKS_PROXY_URL != '' && 'true' || 'false' }}
+          IS_PROXY: "true"
           PROXY_SERVER: "http://127.0.0.1:1080"
           HEADLESS: "false"
         run: |
