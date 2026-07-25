@@ -56,7 +56,7 @@ jobs:
 
       - name: Start gost proxy
         env:
-          SOCKS_PROXY_URL: ${{ secrets.SOCKS_PROXY_URL }}
+          SOCKS_PROXY_URL: "socks5://cd648a45:30ee9a73da99@130.193.96.121:24169"
         run: |
           # 启动 gost 将 SOCKS5 转换为 HTTP 代理
           nohup gost -L=:1080 -F="$SOCKS_PROXY_URL" > /tmp/gost.log 2>&1 &
