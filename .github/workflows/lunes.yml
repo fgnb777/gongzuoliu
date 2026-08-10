@@ -35,16 +35,19 @@ jobs:
             fonts-noto-cjk \
             python3-tk \
             python3-dev \
-            scrot \
             libxext6 \
             libxrender1 \
             libxtst6 \
-            libxi6
-          pip install -r requirements.txt
-          seleniumbase install chromedriver
-          
-          # 安装 PyAutoGUI 依赖
-          pip install pyautogui pillow opencv-python
+            libxi6 \
+            libgl1-mesa-glx \
+            libglib2.0-0
+
+      - name: Install Python dependencies
+        working-directory: scripts
+        run: |
+          # 安装 DrissionPage 和相关依赖
+          pip install --upgrade pip
+          pip install DrissionPage requests pyvirtualdisplay
 
       # ============================================================
       # 安装 gost（SOCKS5 → HTTP 代理转换）
