@@ -1,16 +1,22 @@
-name: LunesHost Auto Login
+name: lunes-AutoLogin
 
 on:
   schedule:
-    - cron: '0 12 */3 * *'
+    # 每 7 天一次
+    # UTC 18:03（北京时间 02:03）
+    - cron: "03 18 */7 * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  login:
+  renew:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    
+    timeout-minutes: 30
+
     steps:
+      # ✅ 检出私库 lunes.host-baohuo
       - name: Checkout private repo
         uses: actions/checkout@v4
         with:
@@ -21,77 +27,44 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.10"
 
-      - name: Install system dependencies
+      # 📦 系统依赖 + Python 依赖
+      - name: Install dependencies
         working-directory: scripts
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             xvfb \
+            chromium-browser \
+            fonts-noto-cjk \
             x11-utils \
             xdotool \
-            scrot \
-            fonts-noto-cjk \
-            python3-tk \
-            python3-dev \
-            libxext6 \
-            libxrender1 \
-            libxtst6 \
-            libxi6 \
-            libgl1-mesa-glx \
-            libglib2.0-0
-
-      - name: Install Python dependencies
-        working-directory: scripts
-        run: |
-          # 安装 DrissionPage 和相关依赖
+            scrot
           pip install --upgrade pip
-          pip install DrissionPage requests pyvirtualdisplay
+          pip install -r requirements.txt -q
 
-      # ============================================================
-      # 安装 gost（SOCKS5 → HTTP 代理转换）
-      # ============================================================
-      - name: Install gost
-        run: |
-          wget -q https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
-          gunzip gost-linux-amd64-2.11.5.gz
-          chmod +x gost-linux-amd64-2.11.5
-          sudo mv gost-linux-amd64-2.11.5 /usr/local/bin/gost
-
-      # ============================================================
-      # 启动 gost 将 SOCKS5 转为 HTTP 代理
-      # ============================================================
-      - name: Start gost proxy
-        run: |
-          SOCKS5_URL="socks5://cd648a45:30ee9a73da99@130.193.96.121:24169"
-          nohup gost -L=:1080 -F="$SOCKS5_URL" > /tmp/gost.log 2>&1 &
-          sleep 5
-          echo "✅ Gost 代理已启动"
-          ps aux | grep gost | grep -v grep || echo "⚠️ gost 可能未运行"
-          netstat -tlnp | grep 1080 || echo "⚠️ 端口 1080 未监听"
-
-      # ============================================================
-      # 运行登录脚本（使用 xvfb-run）
-      # ============================================================
-      - name: Run login script
+      # 🚀 执行登录脚本
+      - name: Run lunes login script
         working-directory: scripts
         env:
+          LUNES_ACCOUNTS_BATCH: ${{ secrets.LUNES_ACCOUNTS_BATCH }}
+          HEADLESS: "true"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          HEADLESS: "true"
-          IS_PROXY: "true"
-          PROXY_SERVER: "http://127.0.0.1:1080"
         run: |
-          echo "🔗 使用代理: http://127.0.0.1:1080"
-          # 使用 xvfb-run 提供虚拟显示
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python main.py
+          # 如果使用硬编码账号，可以不用 LUNES_ACCOUNTS_BATCH
+          # 但如果需要从环境变量读取，就保留
+          echo "🔐 开始执行登录脚本..."
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python login.py
 
-      - name: Upload screenshots
-        uses: actions/upload-artifact@v4
+      # 📦 上传调试文件（即使失败也上传）
+      - name: Upload debug files
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: screenshots-${{ github.run_number }}
-          path: scripts/screenshots/
-          retention-days: 7
-          if-no-files-found: warn
+          name: lunes-debug
+          path: |
+            scripts/*.html
+            scripts/screenshots/**
+          if-no-files-found: ignore
